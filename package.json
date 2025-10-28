@@ -1,28 +1,27 @@
 {
-  "name": "bun-sqlite-session-store",
-  "version": "1.0.1",
-  "description": "A bun:sqlite session store to be used with express-session",
+  "name": "bun-sql-session-store",
+  "version": "1.0.0",
+  "description": "A bun sql session store to be used with express-session",
   "main": "index.ts",
   "scripts": {
-    "build": "tsc",
-    "test": "NODE_OPTIONS='--experimental-sqlite' vitest"
+    "build": "tsc"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oklarowyn/bun-sqlite-session-store.git"
+    "url": "git+https://github.com/oklarowyn/bun-sql-session-store.git"
   },
   "keywords": [
-    "sqlite",
+    "sql",
     "session",
     "express-session",
-    "bun:sqlite",
+    "bun:sql",
     "session store"
   ],
   "author": "Oklarowyn",
   "bugs": {
-    "url": "https://github.com/oklarowyn/bun-sqlite-session-store/issues"
+    "url": "https://github.com/oklarowyn/bun-sql-session-store/issues"
   },
-  "homepage": "https://github.com/oklarowyn/bun-sqlite-session-store",
+  "homepage": "https://github.com/oklarowyn/bun-sql-session-store",
   "publishConfig": {
     "access": "public"
   },
@@ -30,10 +29,12 @@
   "devDependencies": {
     "@types/bun": "latest",
     "express": "^5.1.0",
-    "express-session": "^1.18.1",
-    "vitest": "^3.1.2"
+    "express-session": "^1.18.2"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@types/express-session": "^1.18.2"
   }
 }

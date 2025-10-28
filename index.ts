@@ -1,7 +1,7 @@
-import { Store, SessionData as ExpressSessionData } from 'express-session';
-import { Database } from 'bun:sqlite';
+import { Store, SessionData as ExpressSessionData } from "express-session";
+import { SQL } from "bun";
 
-// Mise à jour de l'interface SessionData pour correspondre à express-session
+// ———————— Interfaces ——————————
 interface Cookie {
   originalMaxAge: number | null;
   maxAge?: number;
@@ -10,8 +10,8 @@ interface Cookie {
   httpOnly?: boolean;
   path?: string;
   domain?: string;
-  secure?: boolean | 'auto';
-  sameSite?: boolean | 'lax' | 'strict' | 'none';
+  secure?: boolean | "auto";
+  sameSite?: boolean | "lax" | "strict" | "none";
 }
 
 interface SessionData extends ExpressSessionData {
@@ -20,9 +20,8 @@ interface SessionData extends ExpressSessionData {
 }
 
 interface StoreOptions {
-  db: Database;
+  db: SQL;
   ttl?: number;
-  [key: string]: any;
 }
 
 interface SessionRow {
@@ -32,115 +31,82 @@ interface SessionRow {
   count?: number;
 }
 
-export class SQLiteStore extends Store {
-  private db: Database;
+// ———————— Store ——————————
+export class BunSQLStore extends Store {
+  private db: SQL;
   private ttl: number;
 
-  constructor(options: StoreOptions = { db: null }) {
-    super(options);
+  constructor(options: StoreOptions) {
+    super();
+    if (!options?.db) throw new Error("BunSQLStore: db instance required");
 
-    this.ttl = options.ttl ?? 86400; // Default TTL: 1 day in seconds
     this.db = options.db;
-    this.initializeDb();
+    this.ttl = options.ttl ?? 86400; // default 1 jour
+
+    // initialisation DB async (ne pas bloquer le constructeur)
+    this.initializeDb().then(() =>
+      console.log("✅ SQL session store initialized")
+    );
   }
 
-  private initializeDb(): void {
+  private async initializeDb() {
     try {
-      this.db.exec(`
+      await this.db`
         CREATE TABLE IF NOT EXISTS sessions (
           sid TEXT PRIMARY KEY,
-          expires INTEGER,
+          expires BIGINT,
           data TEXT,
-          created_at INTEGER
+          created_at BIGINT
         )
-      `);
-
-      this.db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires)');
-
-      console.log('SQLite session store initialized successfully');
+      `;
+      await this.db`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires)`;
     } catch (err) {
-      console.error('Failed to initialize SQLite session store:', err);
+      console.error("❌ Failed to initialize SQL session store:", err);
     }
   }
 
-  get(sid: string, callback: (err: any, session?: SessionData | null) => void): void {
+  // ———————— GET ——————————
+  async get(
+    sid: string,
+    callback: (err: any, session?: SessionData | null) => void
+  ): Promise<void> {
     try {
-      const row = this.db
-        .prepare('SELECT * FROM sessions WHERE sid = ? AND expires > ?')
-        .get(sid, Date.now()) as SessionRow | undefined;
+      const rows = await this.db`
+        SELECT data FROM sessions
+        WHERE sid = ${sid} AND expires > ${Date.now()}
+      `.values();
 
-      if (!row) {
-        return callback(null, null);
-      }
+      if (!rows.length) return callback(null, null);
 
-      const data = JSON.parse(row.data) as SessionData;
+      const data = JSON.parse(rows[0][0]);
       return callback(null, data);
     } catch (err) {
       return callback(err);
     }
   }
 
-  set(sid: string, session: SessionData, callback: (err?: any) => void): void {
+  // ———————— SET ——————————
+  async set(
+    sid: string,
+    session: SessionData,
+    callback: (err?: any) => void
+  ): Promise<void> {
     try {
-      const expires = typeof session.cookie.maxAge === 'number'
-        ? Date.now() + session.cookie.maxAge
-        : Date.now() + (this.ttl * 1000);
+      const expires =
+        typeof session.cookie.maxAge === "number"
+          ? Date.now() + session.cookie.maxAge
+          : Date.now() + this.ttl * 1000;
 
       const data = JSON.stringify(session);
+      const createdAt = Date.now();
 
-      this.db
-        .prepare(
-          `INSERT OR REPLACE INTO sessions (sid, expires, data, created_at)
-          VALUES (?, ?, ?, ?)`
-        )
-        .run(sid, expires, data, Date.now());
-
-      callback();
-    } catch (err) {
-      callback(err);
-    }
-  }
-
-  destroy(sid: string, callback: (err?: any) => void): void {
-    try {
-      this.db
-        .prepare('DELETE FROM sessions WHERE sid = ?')
-        .run(sid);
-      callback();
-    } catch (err) {
-      callback(err);
-    }
-  }
-
-  clear(callback: (err?: any) => void): void {
-    try {
-      this.db.exec('DELETE FROM sessions');
-      callback();
-    } catch (err) {
-      callback(err);
-    }
-  }
-
-  length(callback: (err?: any, length?: number) => void): void {
-    try {
-      const row = this.db
-        .prepare('SELECT COUNT(*) AS count FROM sessions')
-        .get() as SessionRow;
-      callback(null, row ? row.count : 0);
-    } catch (err) {
-      callback(err);
-    }
-  }
-
-  touch(sid: string, session: SessionData, callback: (err?: any) => void): void {
-    try {
-      const expires = typeof session.cookie.maxAge === 'number'
-        ? Date.now() + session.cookie.maxAge
-        : Date.now() + (this.ttl * 1000);
-
-      this.db
-        .prepare('UPDATE sessions SET expires = ? WHERE sid = ?')
-        .run(expires, sid);
+      await this.db`
+        INSERT INTO sessions (sid, expires, data, created_at)
+        VALUES (${sid}, ${expires}, ${data}, ${createdAt})
+        ON CONFLICT (sid) DO UPDATE
+          SET expires = EXCLUDED.expires,
+              data = EXCLUDED.data
+      `;
 
       callback();
     } catch (err) {
@@ -148,16 +114,69 @@ export class SQLiteStore extends Store {
     }
   }
 
-  prune(): void {
+  // ———————— DESTROY ——————————
+  async destroy(sid: string, callback: (err?: any) => void): Promise<void> {
     try {
-      this.db
-        .prepare('DELETE FROM sessions WHERE expires < ?')
-        .run(Date.now());
-      console.log('Expired sessions pruned');
+      await this.db`DELETE FROM sessions WHERE sid = ${sid}`;
+      callback();
     } catch (err) {
-      console.error('Failed to prune expired sessions:', err);
+      callback(err);
+    }
+  }
+
+  // ———————— CLEAR ——————————
+  async clear(callback: (err?: any) => void): Promise<void> {
+    try {
+      await this.db`DELETE FROM sessions`;
+      callback();
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  // ———————— LENGTH ——————————
+  async length(
+    callback: (err?: any, length?: number) => void
+  ): Promise<void> {
+    try {
+      const rows = await this.db`SELECT COUNT(*) FROM sessions`.values();
+      const count = parseInt(rows[0][0], 10) || 0;
+      callback(null, count);
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  // ———————— TOUCH ——————————
+  async touch(
+    sid: string,
+    session: SessionData,
+    callback: (err?: any) => void
+  ): Promise<void> {
+    try {
+      const expires =
+        typeof session.cookie.maxAge === "number"
+          ? Date.now() + session.cookie.maxAge
+          : Date.now() + this.ttl * 1000;
+
+      await this.db`UPDATE sessions SET expires = ${expires} WHERE sid = ${sid}`;
+      callback();
+    } catch (err) {
+      callback(err);
+    }
+  }
+
+  // ———————— PRUNE ——————————
+  async prune(): Promise<void> {
+    try {
+      const result = await this.db`
+        DELETE FROM sessions WHERE expires < ${Date.now()}
+      `;
+      console.log(`🧹 Pruned expired sessions (${result.length ?? 0} removed)`);
+    } catch (err) {
+      console.error("❌ Failed to prune expired sessions:", err);
     }
   }
 }
 
-export default SQLiteStore;
+export default BunSQLStore;
