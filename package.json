@@ -1,0 +1,39 @@
+{
+  "name": "bun-sqlite-session-store",
+  "version": "1.0.1",
+  "description": "A bun:sqlite session store to be used with express-session",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "NODE_OPTIONS='--experimental-sqlite' vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oklarowyn/bun-sqlite-session-store.git"
+  },
+  "keywords": [
+    "sqlite",
+    "session",
+    "express-session",
+    "bun:sqlite",
+    "session store"
+  ],
+  "author": "Oklarowyn",
+  "bugs": {
+    "url": "https://github.com/oklarowyn/bun-sqlite-session-store/issues"
+  },
+  "homepage": "https://github.com/oklarowyn/bun-sqlite-session-store",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1",
+    "vitest": "^3.1.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
