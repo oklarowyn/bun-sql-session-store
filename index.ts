@@ -1,7 +1,6 @@
 import { Store, SessionData as ExpressSessionData } from "express-session";
 import { SQL } from "bun";
 
-// ———————— Interfaces ——————————
 interface Cookie {
   originalMaxAge: number | null;
   maxAge?: number;
