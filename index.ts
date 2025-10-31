@@ -169,9 +169,7 @@ export class BunSQLStore extends Store {
   // ———————— PRUNE ——————————
   async prune(): Promise<void> {
     try {
-      const result = await this.db`
-        DELETE FROM sessions WHERE expires < ${Date.now()}
-      `;
+      const result = await this.db.unsafe(`DELETE FROM sessions WHERE expires < ${Date.now()}`);
       console.log(`🧹 Pruned expired sessions (${result.length ?? 0} removed)`);
     } catch (err) {
       console.error("❌ Failed to prune expired sessions:", err);
