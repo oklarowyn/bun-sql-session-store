@@ -40,9 +40,8 @@ export class BunSQLStore extends Store {
     if (!options?.db) throw new Error("BunSQLStore: db instance required");
 
     this.db = options.db;
-    this.ttl = options.ttl ?? 86400; // default 1 jour
+    this.ttl = options.ttl ?? 86400;
 
-    // initialisation DB async (ne pas bloquer le constructeur)
     this.initializeDb().then(() =>
       console.log("✅ SQL session store initialized")
     );
@@ -50,14 +49,7 @@ export class BunSQLStore extends Store {
 
   private async initializeDb() {
     try {
-      await this.db`
-        CREATE TABLE IF NOT EXISTS sessions (
-          sid TEXT PRIMARY KEY,
-          expires BIGINT,
-          data TEXT,
-          created_at BIGINT
-        )
-      `;
+      await this.db`CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, expires BIGINT, data TEXT, created_at BIGINT)`;
       await this.db`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires)`;
     } catch (err) {
       console.error("❌ Failed to initialize SQL session store:", err);
@@ -70,10 +62,7 @@ export class BunSQLStore extends Store {
     callback: (err: any, session?: SessionData | null) => void
   ): Promise<void> {
     try {
-      const rows = await this.db`
-        SELECT data FROM sessions
-        WHERE sid = ${sid} AND expires > ${Date.now()}
-      `.values();
+      const rows = await this.db`SELECT data FROM sessions WHERE sid = ${sid} AND expires > ${Date.now()}`.values();
 
       if (!rows.length) return callback(null, null);
 
@@ -99,13 +88,7 @@ export class BunSQLStore extends Store {
       const data = JSON.stringify(session);
       const createdAt = Date.now();
 
-      await this.db`
-        INSERT INTO sessions (sid, expires, data, created_at)
-        VALUES (${sid}, ${expires}, ${data}, ${createdAt})
-        ON CONFLICT (sid) DO UPDATE
-          SET expires = EXCLUDED.expires,
-              data = EXCLUDED.data
-      `;
+      await this.db`INSERT INTO sessions (sid, expires, data, created_at) VALUES (${sid}, ${expires}, ${data}, ${createdAt}) ON CONFLICT (sid) DO UPDATE SET expires = EXCLUDED.expires, data = EXCLUDED.data`;
 
       callback();
     } catch (err) {
@@ -134,9 +117,7 @@ export class BunSQLStore extends Store {
   }
 
   // ———————— LENGTH ——————————
-  async length(
-    callback: (err?: any, length?: number) => void
-  ): Promise<void> {
+  async length(callback: (err?: any, length?: number) => void): Promise<void> {
     try {
       const rows = await this.db`SELECT COUNT(*) FROM sessions`.values();
       const count = parseInt(rows[0][0], 10) || 0;
@@ -168,8 +149,8 @@ export class BunSQLStore extends Store {
   // ———————— PRUNE ——————————
   async prune(): Promise<void> {
     try {
-      const result = await this.db.unsafe(`DELETE FROM sessions WHERE expires < ${Date.now()}`);
-      console.log(`🧹 Pruned expired sessions (${result.length ?? 0} removed)`);
+      const result = await this.db`DELETE FROM sessions WHERE expires < ${Date.now()}`;
+      console.log(`🧹 Pruned expired sessions (${result.count ?? 0} removed)`);
     } catch (err) {
       console.error("❌ Failed to prune expired sessions:", err);
     }
