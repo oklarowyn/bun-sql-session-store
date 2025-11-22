@@ -62,7 +62,8 @@ export class BunSQLStore extends Store {
     callback: (err: any, session?: SessionData | null) => void
   ): Promise<void> {
     try {
-      const rows = await this.db`SELECT data FROM sessions WHERE sid = ${sid} AND expires > ${Date.now()}`.values();
+      const now = Date.now();
+      const rows = await this.db`SELECT data FROM sessions WHERE sid = ${sid} AND expires > ${now}`.values();
 
       if (!rows.length) return callback(null, null);
 
@@ -149,7 +150,8 @@ export class BunSQLStore extends Store {
   // ———————— PRUNE ——————————
   async prune(): Promise<void> {
     try {
-      const result = await this.db`DELETE FROM sessions WHERE expires < ${Date.now()}`;
+      const now = Date.now();
+      const result = await this.db`DELETE FROM sessions WHERE expires < ${now}`;
       console.log(`🧹 Pruned expired sessions (${result.count ?? 0} removed)`);
     } catch (err) {
       console.error("❌ Failed to prune expired sessions:", err);

@@ -1,6 +1,6 @@
 {
   "name": "bun-sql-session-store",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A bun sql session store to be used with express-session",
   "main": "index.ts",
   "scripts": {
