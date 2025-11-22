@@ -30,6 +30,10 @@ interface SessionRow {
   count?: number;
 }
 
+// Track initialization to avoid duplicate attempts
+let isInitialized = false;
+let initPromise: Promise<void> | null = null;
+
 // ———————— Store ——————————
 export class BunSQLStore extends Store {
   private db: SQL;
@@ -42,17 +46,35 @@ export class BunSQLStore extends Store {
     this.db = options.db;
     this.ttl = options.ttl ?? 86400;
 
-    this.initializeDb().then(() =>
-      console.log("✅ SQL session store initialized")
-    );
+    // Only initialize once across all instances
+    if (!isInitialized && !initPromise) {
+      initPromise = this.initializeDb()
+        .then(() => {
+          isInitialized = true;
+          console.log("✅ SQL session store initialized");
+        })
+        .catch(err => {
+          console.error("❌ Failed to initialize SQL session store:", err);
+          // Reset so it can be retried
+          initPromise = null;
+        });
+    }
   }
 
   private async initializeDb() {
+    // Silently try to create table/index - ignore errors if they already exist
     try {
       await this.db`CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, expires BIGINT, data TEXT, created_at BIGINT)`;
+    } catch (e: any) {
+      // Ignore "already exists" errors
+      if (!e.message?.includes('already exists')) throw e;
+    }
+    
+    try {
       await this.db`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires)`;
-    } catch (err) {
-      console.error("❌ Failed to initialize SQL session store:", err);
+    } catch (e: any) {
+      // Ignore "already exists" errors
+      if (!e.message?.includes('already exists')) throw e;
     }
   }
 
@@ -81,13 +103,13 @@ export class BunSQLStore extends Store {
     callback: (err?: any) => void
   ): Promise<void> {
     try {
-      const expires =
-        typeof session.cookie.maxAge === "number"
-          ? Date.now() + session.cookie.maxAge
-          : Date.now() + this.ttl * 1000;
-
+      const now = Date.now();
+      const maxAge = typeof session.cookie.maxAge === "number" 
+        ? session.cookie.maxAge 
+        : this.ttl * 1000;
+      const expires = now + maxAge;
       const data = JSON.stringify(session);
-      const createdAt = Date.now();
+      const createdAt = now;
 
       await this.db`INSERT INTO sessions (sid, expires, data, created_at) VALUES (${sid}, ${expires}, ${data}, ${createdAt}) ON CONFLICT (sid) DO UPDATE SET expires = EXCLUDED.expires, data = EXCLUDED.data`;
 
@@ -135,10 +157,11 @@ export class BunSQLStore extends Store {
     callback: (err?: any) => void
   ): Promise<void> {
     try {
-      const expires =
-        typeof session.cookie.maxAge === "number"
-          ? Date.now() + session.cookie.maxAge
-          : Date.now() + this.ttl * 1000;
+      const now = Date.now();
+      const maxAge = typeof session.cookie.maxAge === "number" 
+        ? session.cookie.maxAge 
+        : this.ttl * 1000;
+      const expires = now + maxAge;
 
       await this.db`UPDATE sessions SET expires = ${expires} WHERE sid = ${sid}`;
       callback();
@@ -153,8 +176,11 @@ export class BunSQLStore extends Store {
       const now = Date.now();
       const result = await this.db`DELETE FROM sessions WHERE expires < ${now}`;
       console.log(`🧹 Pruned expired sessions (${result.count ?? 0} removed)`);
-    } catch (err) {
-      console.error("❌ Failed to prune expired sessions:", err);
+    } catch (err: any) {
+      // Don't log if it's just a prepared statement issue during concurrent calls
+      if (!err.message?.includes('already exists') && !err.message?.includes('does not exist')) {
+        console.error("❌ Failed to prune expired sessions:", err);
+      }
     }
   }
 }
